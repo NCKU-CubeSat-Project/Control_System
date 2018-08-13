@@ -26,8 +26,8 @@ This node is used to receive attitude information and publish it to `rviz` for g
 > It is normal to get error message at first because tf_displayer node probably still have not receive information from Arduino.
 
 ### basic rviz setting
-![](https://github.com/NCKU-CubeSat-Project/Archives/blob/master/%E8%9E%A2%E5%B9%95%E6%88%AA%E5%9C%96%202018-08-13%2016.53.32.png)
-  
+<img src="https://github.com/NCKU-CubeSat-Project/Archives/blob/master/%E8%9E%A2%E5%B9%95%E6%88%AA%E5%9C%96%202018-08-13%2016.53.32.png" alt="drawing" width="700px"/>
+
 Step.1: In "Display"→"Global Options"→"Fixed Frame", select "refer".  
 Step.2: On the bottom of the "Display" window, push "Add" and select "Marker" to create a Marker object.  
 Step.3: Wait for rviz to receive the data from "cubesats".  
