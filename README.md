@@ -113,8 +113,13 @@ sudo rfcomm bind rfcomm0 98:D3:31:FC:26:44
 
 Now, in our example, you should find a new file named of `rfcomm0` in `/dev` folder. The path `/dev/rfcomm0` will be used in the next step.
 
-##### [NOTE:]
-If you are using a virtual machine such as VMware, every time powering off it will delete the virtual port we create. Thus, we need to create it again in the next time when we would like to use it. I am not sure if the this phenomenon occurs in a real OS.
+
+> ##### [NOTE:]
+> If you are using a virtual machine such as VMware, every time powering off it will delete the virtual port we create. Thus, we need to create it again in the next time when we would like to use it. I am not sure if the this phenomenon occurs in a real OS.
+
+> ##### [NOTE:]
+> If the permission of bluetooth port is denied, use following command to activate the permission.  
+> `sudo chmod 666 /dev/rfcomm0`
 
 #### \<Step3:\> Establish the link between the CubeSat and PC:
 The link is established in PC terminal. Fisrt, command:
