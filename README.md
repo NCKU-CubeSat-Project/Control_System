@@ -117,9 +117,6 @@ Now, in our example, you should find a new file named of `rfcomm0` in `/dev` fol
 > ##### [NOTE:]
 > If you are using a virtual machine such as VMware, every time powering off it will delete the virtual port we create. Thus, we need to create it again in the next time when we would like to use it. I am not sure if the this phenomenon occurs in a real OS.
 
-> ##### [NOTE:]
-> If the permission of bluetooth port is denied, use following command to activate the permission.  
-> `sudo chmod 666 /dev/rfcomm0`
 
 #### \<Step3:\> Establish the link between the CubeSat and PC:
 The link is established in PC terminal. Fisrt, command:
@@ -134,6 +131,10 @@ rosrun rosserial_python serial_node.py _port:=/dev/rfcomm0 _baud:=115200
 `_port:=` is appointed to our virtual port corresponding to HC-05, and `_baud:=` is to set the baudrate. The default baudrate is 57600.
 
 If the arduino board successfully publishes and subsribes ROS messages in loops, you will see messages of setting up in the terminal running `serial_node.py`. Any faults leading to time delay (eg: bad quality of hardwares may cause another device to wait for messages, resulting in time delay) may disconnect the link since the PC terminal's waiting is timed out.
+
+> ##### [NOTE:]
+> If the permission of bluetooth port is denied, use following command to activate the permission.  
+> `sudo chmod 666 /dev/rfcomm0`
 
 ### Relay
 
