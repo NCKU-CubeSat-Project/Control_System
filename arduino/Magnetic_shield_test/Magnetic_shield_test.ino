@@ -27,23 +27,18 @@
 #define RELAY_MAIN 11 // relay three
 #define RELAY_POSI_YAW 12 // relay four
 
-// Buzzer
-#define BUZZER_SIGNAL 51 // buzzer signal
-void alert(int times, int delay_time);
-
-#define SerialDebug false   // set to true to get Serial output for debugging
+#define SerialDebug true   // set to true to get Serial output for debugging
 #define CALIBRATION false // set true to do MPU9250 calibration. when calibrating, you can open Arduino Serial Monitor to check the stage and get bias data.
 #define LCD true // set true to print on LCD
 
 // Using I2C monochrome LCD
-LiquidCrystal_I2C display(0x27,16,2);  // set the LCD address to 0x27 for a 16 chars and 2 line display
+LiquidCrystal_I2C display(0x3F,16,2);  // set the LCD address to 0x27 for a 16 chars and 2 line display
 
 // CubeSat modes
 /* -1 : Wait for adjusting wiring to connect to IMU
    0 : Power off the thruster. Only read sensor data. No control determination.
    1 : Power on the CubeSat*/
-int CubeMode;
-int TestMode; 
+int CubeMode; 
 
 uint32_t delt_t = 0, delt_t_ros = 0; // rate of control value determination
 uint32_t count = 0, count_ros = 0; // used to control display output rate
@@ -105,46 +100,6 @@ void powerThruster(const std_srvs::SetBool::Request &req, std_srvs::SetBool::Res
     }
 }
 
-void testThruster(const std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res)
-{
-  if (req.data) { // power the thruster
-     TestMode = 1;
-     digitalWrite(RELAY_POWER, HIGH);
-     delay(1000);
-     digitalWrite(RELAY_NEGA_YAW, LOW);
-     digitalWrite(RELAY_POSI_YAW, HIGH);
-     delay(1000);
-     digitalWrite(RELAY_NEGA_YAW, LOW);
-     digitalWrite(RELAY_POSI_YAW, LOW);
-     delay(1000);
-     digitalWrite(RELAY_NEGA_YAW, HIGH);
-     digitalWrite(RELAY_POSI_YAW, LOW);
-     delay(1000);
-     digitalWrite(RELAY_NEGA_YAW, LOW);
-     digitalWrite(RELAY_POSI_YAW, LOW);
-     digitalWrite(RELAY_POWER, LOW);     
-     //res.message = "successfully power on thrusters!";
-    }
-  else {
-     TestMode = 0;
-     digitalWrite(RELAY_POWER, LOW);
-     //res.message = "successfully power off thrusters!";
-    }
-}
-void alerting(const std_srvs::SetBool::Request &req, std_srvs::SetBool::Response &res)
-{
-  if (req.data) { 
-    alert(3,500);
-    digitalWrite(BUZZER_SIGNAL,HIGH);
-    delay(1000);
-    digitalWrite(BUZZER_SIGNAL,LOW);
-    delay(500);
-  }
-  else {
-   //res.message = "successfully power off thrusters!";
-  }
-}
-
 ros::NodeHandle nh;
 
 geometry_msgs::TransformStamped transf; // to store the attitude and position of the cubesat
@@ -155,8 +110,6 @@ std_msgs::Int16 debug_cubeMode_msg;
 tf::TransformBroadcaster broadcaster;
 ros::ServiceServer<serial_srvs::DesiredValue::Request, serial_srvs::DesiredValue::Response> desiredValue_server("desired_value", &getDesiredValue);
 ros::ServiceServer<std_srvs::SetBool::Request, std_srvs::SetBool::Response> thrustPowered_server("thrust_powered", &powerThruster);
-ros::ServiceServer<std_srvs::SetBool::Request, std_srvs::SetBool::Response> thrustTested_server("thrust_tested", &testThruster);
-ros::ServiceServer<std_srvs::SetBool::Request, std_srvs::SetBool::Response> alerted_server("alerted", &alerting);
 ros::Publisher debug_desiredValue_pub("debug_desiredValue", &debug_desiredValue_msg);
 ros::Publisher debug_thrustSwitch_pub("debug_thrustSwitch", &debug_thrustSwitch_msg);
 ros::Publisher debug_cubeMode_pub("debug_cubeMode", &debug_cubeMode_msg);
@@ -167,8 +120,6 @@ void setup()
   nh.initNode();
   nh.advertiseService(desiredValue_server);
   nh.advertiseService(thrustPowered_server);
-  nh.advertiseService(thrustTested_server);
-  nh.advertiseService(alerted_server);
   nh.advertise(debug_desiredValue_pub);
   nh.advertise(debug_thrustSwitch_pub);
   nh.advertise(debug_cubeMode_pub);
@@ -181,12 +132,10 @@ void setup()
   pinMode(RELAY_NEGA_YAW, OUTPUT);
   pinMode(RELAY_MAIN, OUTPUT);
   pinMode(RELAY_POSI_YAW, OUTPUT);
-  pinMode(BUZZER_SIGNAL, OUTPUT);
   digitalWrite(RELAY_POWER, LOW);
   digitalWrite(RELAY_NEGA_YAW, LOW);
   digitalWrite(RELAY_MAIN, LOW);
   digitalWrite(RELAY_POSI_YAW, LOW);
-  digitalWrite(BUZZER_SIGNAL, LOW);
   
   Wire.begin();
   if (SerialDebug | CALIBRATION) {
@@ -201,8 +150,6 @@ void setup()
   setupIMU(); // will determine the initial CubeSat mode
   initModulator(); 
   ProgramBeginTime = millis()/1000;
-
-  alert(2,150);
 }
 
 void loop()
@@ -229,7 +176,8 @@ void loop()
   
      delt_t = millis() - count;
      if (delt_t > CONTROL_PERIOD) { // set control value per 0.5 seconds independent of read rate
-        if (SerialDebug) {    
+        if (SerialDebug) {
+          /*  
            Serial.print("ax = "); Serial.print((int)1000*ax);  
            Serial.print(" ay = "); Serial.print((int)1000*ay); 
            Serial.print(" az = "); Serial.print((int)1000*az); Serial.println(" mg");
@@ -244,7 +192,7 @@ void loop()
            Serial.print("q0 = "); Serial.print(q[0]);
            Serial.print(" qx = "); Serial.print(q[1]); 
            Serial.print(" qy = "); Serial.print(q[2]); 
-           Serial.print(" qz = "); Serial.println(q[3]); 
+           Serial.print(" qz = "); Serial.println(q[3]); */
           } 
               
         // Define output variables from updated quaternion---these are Tait-Bryan angles, commonly used in aircraft orientation.
@@ -311,24 +259,32 @@ void loop()
            thrust_switch = 0;
           }  
         switchThruster();
-           
+        
+        float mm = sqrt(mx*mx + my*my + mz*mz);  
+                
         if (SerialDebug) {
-           Serial.print("Yaw, Pitch, Roll: ");
-           Serial.print(yaw, 1);
+           Serial.print("mx my mz All :  ");
+           Serial.print(mx, 1);
            Serial.print(", ");
-           Serial.print(pitch, 1);
+           Serial.print(my, 1);
            Serial.print(", ");
-           Serial.println(roll, 1);
+           Serial.print(mz, 1);
+           Serial.print(", ");
+           Serial.print(mm, 1);
     
-           Serial.print("rate = "); Serial.print((float)sumCount/sum, 2); Serial.println(" Hz");
+           Serial.print("  rate = "); Serial.print((float)sumCount/sum, 2); Serial.println(" Hz");
           }
 
         if (LCD) {
            display.clear();
-           display.print("Yaw  Pitch  Roll");
-           display.setCursor(0,1); display.print(yaw, 0);
-           display.setCursor(5,1); display.print(pitch, 0);
-           display.setCursor(12,1); display.print(roll, 0);
+           display.setCursor(0,0);  display.print("mx ");
+           display.setCursor(3,0);  display.print(mx, 0);
+           display.setCursor(0,1);  display.print("my ");
+           display.setCursor(3,1);  display.print(my, 0);
+           display.setCursor(8,0);  display.print("mz ");
+           display.setCursor(11,0); display.print(mz, 0);
+           display.setCursor(8,1);  display.print("AL ");
+           display.setCursor(11,1); display.print(mm, 0);
           }
 
         count = millis(); 
@@ -404,16 +360,5 @@ void switchThruster()
     digitalWrite(RELAY_NEGA_YAW, HIGH);
     digitalWrite(RELAY_POSI_YAW, LOW);
    }
-}
-
-void alert(int times, int delay_time)
-{
-  while (times > 0) {
-    digitalWrite(BUZZER_SIGNAL,HIGH);
-    delay(delay_time);
-    digitalWrite(BUZZER_SIGNAL,LOW);
-    delay(delay_time);
-    times = times - 1;
-  }
 }
 

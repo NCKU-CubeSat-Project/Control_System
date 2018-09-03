@@ -131,6 +131,8 @@ include_directories(
 add_executable(tf_displayer src/tf_displayer.cpp)
 add_executable(set_desiredValue src/set_desiredValue.cpp)
 add_executable(power_thruster src/power_thruster.cpp)
+add_executable(test_thruster src/test_thruster.cpp)
+add_executable(alert src/alert.cpp)
 add_executable(debug_node src/debug_node.cpp)
 
 ## Add cmake target dependencies of the library
@@ -139,6 +141,8 @@ add_executable(debug_node src/debug_node.cpp)
 add_dependencies(tf_displayer ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(set_desiredValue ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(power_thruster ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(test_thruster ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(alert ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(debug_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Rename C++ executable without prefix
@@ -155,6 +159,8 @@ add_dependencies(debug_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTE
 target_link_libraries(tf_displayer ${catkin_LIBRARIES})
 target_link_libraries(set_desiredValue ${catkin_LIBRARIES})
 target_link_libraries(power_thruster ${catkin_LIBRARIES})
+target_link_libraries(test_thruster ${catkin_LIBRARIES})
+target_link_libraries(alert ${catkin_LIBRARIES})
 target_link_libraries(debug_node ${catkin_LIBRARIES})
 
 #############

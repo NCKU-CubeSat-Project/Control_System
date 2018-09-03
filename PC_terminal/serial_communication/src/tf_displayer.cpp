@@ -25,8 +25,8 @@ int main(int argc, char **argv)
  marker.id = 0;
  marker.type = visualization_msgs::Marker::CUBE; // using a cube to represent a CubeSat.
  marker.action = visualization_msgs::Marker::ADD;
- marker.scale.x = 1;
- marker.scale.y = 1;
+ marker.scale.x = 2;
+ marker.scale.y = 4;
  marker.scale.z = 1;
  marker.color.r = 0.5;
  marker.color.g = 0.5;

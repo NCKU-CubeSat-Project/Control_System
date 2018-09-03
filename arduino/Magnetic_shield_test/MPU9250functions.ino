@@ -1,24 +1,17 @@
-#include <SPI.h>
-#include <Wire.h>
-#include <LiquidCrystal_I2C_Wire1.h>
-#include <Utility.h>
-
-// Using I2C LCD monochrome 84 x 48 pixel display
-LiquidCrystal_I2C display(0x3F,16,2);  // set the LCD address to 0x27 for a 16 chars and 2 line display
-
-// See also MPU-9250 Register Map and Descriptions, Revision 4.0, RM-MPU-9250A-00, Rev. 1.4, 9/9/2013 for registers not listed in 
-// above document; the MPU9250 and MPU9150 are virtually identical but the latter has a different register map
+//===================================================================================================================
+//====== useful functions to access acceleration. gyroscope, magnetometer, and temperature data
+//===================================================================================================================
 // Magnetometer Registers
 #define AK8963_ADDRESS   0x0C
 #define AK8963_WHO_AM_I  0x00 // should return 0x48
 #define AK8963_INFO      0x01
 #define AK8963_ST1       0x02  // data ready status bit 0
-#define AK8963_XOUT_L	 0x03  // data
-#define AK8963_XOUT_H	 0x04
-#define AK8963_YOUT_L	 0x05
-#define AK8963_YOUT_H	 0x06
-#define AK8963_ZOUT_L	 0x07
-#define AK8963_ZOUT_H	 0x08
+#define AK8963_XOUT_L   0x03  // data
+#define AK8963_XOUT_H  0x04
+#define AK8963_YOUT_L  0x05
+#define AK8963_YOUT_H  0x06
+#define AK8963_ZOUT_L  0x07
+#define AK8963_ZOUT_H  0x08
 #define AK8963_ST2       0x09  // Data overflow bit 3 and data read error status bit 2
 #define AK8963_CNTL      0x0A  // Power down (0000), single-measurement (0001), self-test (1000) and Fuse ROM (1111) modes on bits 3:0
 #define AK8963_ASTC      0x0C  // Self test control
@@ -162,12 +155,7 @@ LiquidCrystal_I2C display(0x3F,16,2);  // set the LCD address to 0x27 for a 16 c
 #else
 #define MPU9250_ADDRESS 0x68  // Device address when ADO = 0
 #define AK8963_ADDRESS 0x0C   //  Address of magnetometer
-#endif  
-
-#define AHRS true         // set to false for basic data read
-#define SerialDebug false   // set to true to get Serial output for debugging
-#define MAG_CALIBRATION false // set true to do magnetic calibration
-#define LCD false // set true to print on LCD
+#endif
 
 // Set initial input parameters
 enum Ascale {
@@ -194,193 +182,143 @@ uint8_t Gscale = GFS_250DPS;
 uint8_t Ascale = AFS_2G;
 uint8_t Mscale = MFS_16BITS; // Choose either 14-bit or 16-bit magnetometer resolution
 uint8_t Mmode = 0x02;        // 2 for 8 Hz, 6 for 100 Hz continuous magnetometer data read
-float aRes, gRes, mRes;      // scale resolutions per LSB for the sensors
-  
-// Pin definitions
-int intPin = 12;  // These can be changed, 2 and 3 are the Arduinos ext int pins
-int myLed = 13; // Set up pin 13 led for toggling
 
+float SelfTest[6];    // holds results of gyro and accelerometer self test
 int16_t accelCount[3];  // Stores the 16-bit signed accelerometer sensor output
 int16_t gyroCount[3];   // Stores the 16-bit signed gyro sensor output
 int16_t magCount[3];    // Stores the 16-bit signed magnetometer sensor output
+
+float aRes, gRes, mRes;      // scale resolutions per LSB for the sensors
 float magCalibration[3] = {0, 0, 0}, magBias[3] = {0, 0, 0}, magScale[3] = {0, 0, 0};  // Factory mag calibration, mag bias, and bias scale factor
 float gyroBias[3] = {0, 0, 0}, accelBias[3] = {0, 0, 0};      // Bias corrections for gyro and accelerometer
-int16_t tempCount;      // temperature raw count output
-float   temperature;    // Stores the real internal chip temperature in degrees Celsius
-float   SelfTest[6];    // holds results of gyro and accelerometer self test
 
-// global constants for 9 DoF fusion and AHRS (Attitude and Heading Reference System)
-float GyroMeasError = PI * (40.0f / 180.0f);   // gyroscope measurement error in rads/s (start at 40 deg/s)
-float GyroMeasDrift = PI * (0.0f  / 180.0f);   // gyroscope measurement drift in rad/s/s (start at 0.0 deg/s/s)
-// There is a tradeoff in the beta parameter between accuracy and response speed.
-// In the original Madgwick study, beta of 0.041 (corresponding to GyroMeasError of 2.7 degrees/s) was found to give optimal accuracy.
-// However, with this value, the LSM9SD0 response time is about 10 seconds to a stable initial quaternion.
-// Subsequent changes also require a longish lag time to a stable output, not fast enough for a quadcopter or robot car!
-// By increasing beta (GyroMeasError) by about a factor of fifteen, the response time constant is reduced to ~2 sec
-// I haven't noticed any reduction in solution accuracy. This is essentially the I coefficient in a PID control sense; 
-// the bigger the feedback coefficient, the faster the solution converges, usually at the expense of accuracy. 
-// In any case, this is the free parameter in the Madgwick filtering and fusion scheme.
-float beta = sqrt(3.0f / 4.0f) * GyroMeasError;   // compute beta
-float zeta = sqrt(3.0f / 4.0f) * GyroMeasDrift;   // compute zeta, the other free parameter in the Madgwick scheme usually set to a small or zero value
-#define Kp 2.0f * 5.0f // these are the free parameters in the Mahony filter and fusion scheme, Kp for proportional feedback, Ki for integral
-#define Ki 0.0f
-
-uint32_t delt_t = 0; // used to control display output rate
-uint32_t count = 0, sumCount = 0; // used to control display output rate
-float pitch, yaw, roll;
-float deltat = 0.0f, sum = 0.0f;        // integration interval for both filter schemes
-uint32_t lastUpdate = 0, firstUpdate = 0; // used to calculate integration interval
-uint32_t Now = 0;        // used to calculate integration interval
-
-float ax, ay, az, gx, gy, gz, mx, my, mz, mx_temp, my_temp, mz_temp; // variables to hold latest sensor data values 
-float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};    // vector to hold quaternion
-float eInt[3] = {0.0f, 0.0f, 0.0f};       // vector to hold integral error for Mahony method
-
-char angle_info[30];
-
-#define MAG_DECLINE_RAD -3.5f/180*PI
-
-// cubesate and thruster properties
-// assuming that center of mass is at geometric center
-// float w = 0.239f; // width of cubesat (meter)
-float l = 0.464f; // length of cubesat (meter)
-float thrust_M_design = 0.4f*(l/2.0f)*(3/4.0f);// desirable moment in outerspace (without friction) produced by thruster
-float on_duration_min = 0.03f; // thruster restrcition of turning on
-float off_duration_min = 0.03f; // thrusster restrcition of turnning off
-float Control_value_min = thrust_M_design*on_duration_min/(on_duration_min+off_duration_min);
-
-float K_angle = 0.3f; // feedback gain for angle position   
-float K_angu_v = 0.6f; // feedback gain for angular velocity
-
-// controller related parameters
-float uplimit = thrust_M_design; 
-float deadband = uplimit*0.75f; // within +-3 degree angles, thrusters are not activated.
-
-float Expectation, Error, angle_sensor, angu_v_sensor;
-float Control_value, duration_on, duration_cycle, time_last_on, time_last_off, currentTime;
-float ProgramBeginTime; // used to record the beginning time of this program (second).
-int thrust_switch; // status of thruster (on/off with direction)
-
-void setup()
-{
-  Wire.begin();
-//  TWBR = 12;  // 400 kbit/sec I2C speed
-  Serial.begin(9600);
+// test if successdully connect to IMU by reading the WHO_AM_I register
+void setupIMU() {  
+  getMres();
+  getGres();
+  getAres();
   
-  // Set up the interrupt pin, it's set as active high, push-pull
-  pinMode(intPin, INPUT);
-  digitalWrite(intPin, LOW);
-  pinMode(myLed, OUTPUT);
-  digitalWrite(myLed, HIGH);
-
-  if (LCD) {
-    display.init(); // Initialize the LCD
-    display.backlight();
-  }
-
-  // Read the WHO_AM_I register, this is a good test of communication
   byte c = readByte(MPU9250_ADDRESS, WHO_AM_I_MPU9250);  // Read WHO_AM_I register for MPU-9250
+  delay(10);
   if (SerialDebug) {
       Serial.print("MPU9250 "); Serial.print("I AM "); Serial.print(c, HEX); Serial.print(" I should be "); Serial.println(0x71, HEX);
      }
-  delay(1000); 
+  if (c == 0x71) { // WHO_AM_I should always be 0x71
+     if (SerialDebug) { 
+         Serial.println("MPU9250 is online...");
+        }
 
-  if (c == 0x71) // WHO_AM_I should always be 0x71
-  { 
-    if (SerialDebug) { 
-        Serial.println("MPU9250 is online...");
-       }
-
-    if (LCD) {
-       display.clear();
-       display.setCursor(0,0);
-       display.print("MPU9250");
-       display.setCursor(0,1); display.print("Calibrating..");
-      }
-    getMres();
-    getGres();
-    getAres();
-    
-    MPU9250SelfTest(SelfTest); // Start by performing self test and reporting values
-  /*  Serial.print("x-axis self test: acceleration trim within : "); Serial.print(SelfTest[0],1); Serial.println("% of factory value");
-    Serial.print("y-axis self test: acceleration trim within : "); Serial.print(SelfTest[1],1); Serial.println("% of factory value");
-    Serial.print("z-axis self test: acceleration trim within : "); Serial.print(SelfTest[2],1); Serial.println("% of factory value");
-    Serial.print("x-axis self test: gyration trim within : "); Serial.print(SelfTest[3],1); Serial.println("% of factory value");
-    Serial.print("y-axis self test: gyration trim within : "); Serial.print(SelfTest[4],1); Serial.println("% of factory value");
-    Serial.print("z-axis self test: gyration trim within : "); Serial.print(SelfTest[5],1); Serial.println("% of factory value"); */
-
-    calibrateMPU9250(gyroBias, accelBias); // Calibrate gyro and accelerometers, load biases in bias registers
-    initMPU9250(); 
-    if (SerialDebug) {
-       Serial.println("MPU9250 initialized for active data mode...."); // Initialize device for active mode read of acclerometer, gyroscope, and temperature
-      }
-    delay(1000); 
-
-    // Read the WHO_AM_I register of the magnetometer, this is a good test of communication
-    byte d = readByte(AK8963_ADDRESS, AK8963_WHO_AM_I);  // Read WHO_AM_I register for AK8963
-    if(SerialDebug) {
-      Serial.print("AK8963 "); Serial.print("I AM "); Serial.print(d, HEX); Serial.print(" I should be "); Serial.println(0x48, HEX);
-    }
-    delay(1000); 
-
-    if (d == 0x48) { // WHO_AM_I should always be 0x48
-       // Get magnetometer calibration from AK8963 ROM
-       // Serial.println("AK8963 initialized for active data mode...."); // Initialize device for active mode read of magnetometer
-       initAK8963(magCalibration); 
-       if (LCD) {
-          display.clear();
-          display.print("AK8963");
-          display.setCursor(0,1); display.print("Calibrating..");
-         }
-
-       if (MAG_CALIBRATION)
-           magcalMPU9250(magBias, magScale);
-       else {
-           magBias[0] = -86.03; // determined by previous test of the magnetometer
-           magBias[1] = 228.66;
-           magBias[2] = -371.48;
-           magScale[0] = 1.08;
-           magScale[1] = 1.08;
-           magScale[2] = 0.88;   
-          }
-       delay(1000);
-      }
-    else
-      {
-        if (SerialDebug) {
-            Serial.print("Could not connect to AK8963: 0x");
-            Serial.println(d, HEX);
-          }
+     if (CALIBRATION) {
+        Serial.println("Start to calibrate MPU9250. Please put your IMU on a horizontal plane.");
         if (LCD) {
-            display.clear();
-            display.print("CAN'T CONNECT");
-            display.setCursor(0,1); display.print("TO AK8963!");
+           display.clear();
+           display.setCursor(0,0);
+           display.print("MPU9250");
+           display.setCursor(0,1); display.print("Calibrating..");
           }
-        while(1) ; // Loop forever if communication doesn't happen
-      }
-  }
-  else
-  {
-    if (SerialDebug) {
-      Serial.print("Could not connect to MPU9250: 0x");
-      Serial.println(c, HEX);
+        calibrateMPU9250(gyroBias, accelBias); // Calibrate gyro and accelerometers, load biases in bias registers
+        Serial.print("gyroBias-x: "); Serial.println(gyroBias[0]);
+        Serial.print("gyroBias-y: "); Serial.println(gyroBias[1]);
+        Serial.print("gyroBias-z: "); Serial.println(gyroBias[2]);
+        Serial.print("accelBias-x: "); Serial.println(accelBias[0]);
+        Serial.print("accelBias-y: "); Serial.println(accelBias[1]);
+        Serial.print("accelBias-z: "); Serial.println(accelBias[2]);
+       }
+     else {
+        gyroBias[0] = 0.11; // determined by previous test of the magnetometer
+        gyroBias[1] = 2.23;
+        gyroBias[2] = 0.92;
+        accelBias[0] = -0.05;
+        accelBias[1] = 0.02;
+        accelBias[2] = 0.02; 
+        if (LCD) {
+           display.clear();
+           display.setCursor(0,0);
+           display.print("MPU9250");
+           display.setCursor(0,1); display.print("Setting up..");
+          }
+       }
+     initMPU9250(); 
+     delay(1000); 
+
+     // Read the WHO_AM_I register of the magnetometer, this is a good test of communication
+     byte d = readByte(AK8963_ADDRESS, AK8963_WHO_AM_I);  // Read WHO_AM_I register for AK8963
+     delay(10);
+     if (SerialDebug) {
+        Serial.print("AK8963 "); Serial.print("I AM "); Serial.print(d, HEX); Serial.print(" I should be "); Serial.println(0x48, HEX);
+       }
+     if (d == 0x48) { // WHO_AM_I should always be 0x48
+        if (SerialDebug) { 
+           Serial.println("AK8963 is online..."); // Initialize device for active mode read of magnetometer
+          }
+        
+        initAK8963(magCalibration); 
+        if (CALIBRATION) {
+           Serial.println("Start to calibrate AK8963. Please wave your IMU.");
+           if (LCD) {
+              display.clear();
+              display.print("AK8963");
+              display.setCursor(0,1); display.print("Calibrating..");
+             }
+           magcalMPU9250(magBias, magScale);
+           Serial.print("magBias-x: "); Serial.println(magBias[0]);
+           Serial.print("magBias-y: "); Serial.println(magBias[1]);
+           Serial.print("magBias-z: "); Serial.println(magBias[2]);
+           Serial.print("magScale-x: "); Serial.println(magScale[0]);
+           Serial.print("magScale-y: "); Serial.println(magScale[1]);
+           Serial.print("magScale-z: "); Serial.println(magScale[2]);
+          }
+        else {
+           magBias[0] = 17.40; // determined by previous test of the magnetometer
+           magBias[1] = 57.23;
+           magBias[2] = -366.83;
+           magScale[0] = 1.04;
+           magScale[1] = 1.01;
+           magScale[2] = 0.95;
+           if (LCD) {
+              display.clear();
+              display.print("AK8963");
+              display.setCursor(0,1); display.print("Setting up..");
+             }
+          }
+        delay(1000);
+
+        CubeMode = 0; // Successfully connects but power off the thrusters
+       }
+     else {
+         if (SerialDebug) {
+             Serial.print("Could not connect to AK8963: 0x");
+             Serial.println(d, HEX);
+           }
+         if (LCD) {
+             display.clear();
+             display.print("CAN'T CONNECT");
+             display.setCursor(0,1); display.print("TO AK8963!");
+           }
+           
+         CubeMode = -1; // Fails to connect to AK8963
+        }
     }
-    if (LCD) {
-      display.clear();
-      display.print("CAN'T CONNECT");
-      display.setCursor(0,1); display.print("TO MPU9250!");
-    }
-    while(1) ; // Loop forever if communication doesn't happen
-  }
+  else {
+      if (SerialDebug) {
+         Serial.print("Could not connect to MPU9250: 0x");
+         Serial.println(c, HEX);
+        }
+      if (LCD) {
+         display.clear();
+         display.print("CAN'T CONNECT");
+         display.setCursor(0,1); display.print("TO MPU9250!");
+        }
+        
+      CubeMode = -1; // Fails to connect to MPU9250
+     } 
 }
 
-void loop()
-{  
-  // If intPin goes high, all data registers have new data
-  if (readByte(MPU9250_ADDRESS, INT_STATUS) & 0x01) {  // On interrupt, check if data ready interrupt
+// check if data ready for interrupting and reading.
+void readNewData() {
+  if (readByte(MPU9250_ADDRESS, INT_STATUS) & 0x01) {  
      readAccelData(accelCount);  // Read the x/y/z adc values
-     // Now we'll calculate the accleration value into actual g's
-     ax = (float)accelCount[0]*aRes - accelBias[0];  // get actual g value, this depends on scale being set
+     ax = (float)accelCount[0]*aRes - accelBias[0];  // get the actual g value, this depends on scale being set
      ay = (float)accelCount[1]*aRes - accelBias[1];   
      az = (float)accelCount[2]*aRes - accelBias[2];  
    
@@ -391,7 +329,7 @@ void loop()
      gz = (float)gyroCount[2]*gRes;   
 
      readMagData(magCount);  // Read the x/y/z adc values    
-     mx_temp = (float)magCount[0]*mRes*magCalibration[0] - magBias[0];  // get actual magnetometer value, this depends on scale being set
+     mx_temp = (float)magCount[0]*mRes*magCalibration[0] - magBias[0];  // get the actual magnetometer value, this depends on scale being set
      my_temp = (float)magCount[1]*mRes*magCalibration[1] - magBias[1];  
      mz_temp = (float)magCount[2]*mRes*magCalibration[2] - magBias[2]; 
      mx_temp *= magScale[0];
@@ -401,184 +339,17 @@ void loop()
      mx = cos(-MAG_DECLINE_RAD)*mx_temp - sin(-MAG_DECLINE_RAD)*my_temp;
      my = sin(-MAG_DECLINE_RAD)*mx_temp + cos(-MAG_DECLINE_RAD)*my_temp;
      mz = mz_temp;
+
+     tempCount = readTempData();  // Read the adc values
+     temperature = ((float) tempCount) / 333.87 + 21.0; // Temperature in degrees Centigrade
     }
-  
-  Now = micros();
-  deltat = ((Now - lastUpdate)/1000000.0f); // set integration time by time elapsed since last filter update
-  lastUpdate = Now;
-
-  sum += deltat; // sum for averaging filter update rate
-  sumCount++;
-  
-  // Sensors x (y)-axis of the accelerometer is aligned with the y (x)-axis of the magnetometer;
-  // the magnetometer z-axis (+ down) is opposite to z-axis (+ up) of accelerometer and gyro!
-  // We have to make some allowance for this orientation mismatch in feeding the output to the quaternion filter.
-  // For the MPU-9250, we have chosen a magnetic rotation that keeps the sensor forward along the x-axis just like
-  // in the LSM9DS0 sensor. This rotation can be modified to allow any convenient orientation convention.
-  // This is ok by aircraft orientation standards!  
-  // Pass gyro rate as rad/s
-  //MadgwickQuaternionUpdate(-ax, ay, az, gx*PI/180.0f, -gy*PI/180.0f, -gz*PI/180.0f,  my,  -mx, mz);
-  MahonyQuaternionUpdate(-ax, ay, az, gx*PI/180.0f, -gy*PI/180.0f, -gz*PI/180.0f, my, -mx, mz);
-  
-  if (!AHRS) {
-    delt_t = millis() - count;
-    if (delt_t > 500) {
-       if (SerialDebug) {
-          // Print acceleration values in milligs!
-          Serial.print("X-acceleration: "); Serial.print(1000*ax); Serial.print(" mg ");
-          Serial.print("Y-acceleration: "); Serial.print(1000*ay); Serial.print(" mg ");
-          Serial.print("Z-acceleration: "); Serial.print(1000*az); Serial.println(" mg ");
- 
-          // Print gyro values in degree/sec
-          Serial.print("X-gyro rate: "); Serial.print(gx, 3); Serial.print(" degrees/sec "); 
-          Serial.print("Y-gyro rate: "); Serial.print(gy, 3); Serial.print(" degrees/sec "); 
-          Serial.print("Z-gyro rate: "); Serial.print(gz, 3); Serial.println(" degrees/sec"); 
-    
-          // Print mag values in degree/sec
-          Serial.print("X-mag field: "); Serial.print(mx); Serial.print(" mG "); 
-          Serial.print("Y-mag field: "); Serial.print(my); Serial.print(" mG "); 
-          Serial.print("Z-mag field: "); Serial.print(mz); Serial.println(" mG"); 
- 
-          tempCount = readTempData();  // Read the adc values
-          temperature = ((float) tempCount) / 333.87 + 21.0; // Temperature in degrees Centigrade
-          // Print temperature in degrees Centigrade      
-          Serial.print("Temperature is ");  Serial.print(temperature, 1);  Serial.println(" degrees C"); // Print T values to tenths of s degree C
-         }
-    
-        count = millis();
-        digitalWrite(myLed, !digitalRead(myLed));  // toggle led
-      }
-    }
-  else {
-      // Serial print and/or display at 0.5 s rate independent of data rates
-      delt_t = millis() - count;
-      if (delt_t > 500) { // update LCD once per half-second independent of read rate
-         if (SerialDebug) {    
-            Serial.print("ax = "); Serial.print((int)1000*ax);  
-            Serial.print(" ay = "); Serial.print((int)1000*ay); 
-            Serial.print(" az = "); Serial.print((int)1000*az); Serial.println(" mg");
-            Serial.print("gx = "); Serial.print( gx, 2); 
-            Serial.print(" gy = "); Serial.print( gy, 2); 
-            Serial.print(" gz = "); Serial.print( gz, 2); Serial.println(" deg/s");
-            Serial.print("mx = "); Serial.print( (int)mx ); 
-            Serial.print(" my = "); Serial.print( (int)my ); 
-            Serial.print(" mz = "); Serial.print( (int)mz ); Serial.println(" mG");
-    
-            Serial.print("q0 = "); Serial.print(q[0]);
-            Serial.print(" qx = "); Serial.print(q[1]); 
-            Serial.print(" qy = "); Serial.print(q[2]); 
-            Serial.print(" qz = "); Serial.println(q[3]); 
-           }               
-    
-         // Define output variables from updated quaternion---these are Tait-Bryan angles, commonly used in aircraft orientation.
-         // In this coordinate system, the positive z-axis is down toward Earth. 
-         // Yaw is the angle between Sensor x-axis and Earth magnetic North (or true North if corrected for local declination, looking down on the sensor positive yaw is counterclockwise.
-         // Pitch is angle between sensor x-axis and Earth ground plane, toward the Earth is negative, up toward the sky is positive.
-         // Roll is angle between sensor y-axis and Earth ground plane, y-axis up is positive roll.
-         // These arise from the definition of the homogeneous rotation matrix constructed from quaternions.
-         // Tait-Bryan angles as well as Euler angles are non-commutative; that is, the get the correct orientation the rotations must be
-         // applied in the correct order which for this configuration is yaw, pitch, and then roll.
-         // For more see http://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles which has additional links.
-         yaw   = atan2(2.0f * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);   
-         pitch = -asin(2.0f * (q[1] * q[3] - q[0] * q[2]));
-         roll  = atan2(2.0f * (q[0] * q[1] + q[2] * q[3]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3]);
-         pitch *= 180.0f / PI;
-         yaw   *= 180.0f / PI; 
-         roll  *= 180.0f / PI;
-
-         // controller
-         Expectation = 0; // the angle we want to track. Expectation = 0 represents pointing toward North.
-
-         angle_sensor = getAngle();
-         angu_v_sensor = getAnguV();
-         Error = Expectation - angle_sensor*K_angle - angu_v_sensor*K_angu_v;
-         if (SerialDebug) {
-            Serial.print("deadband: "); Serial.println(deadband);
-            Serial.print("thrust_M_design: "); Serial.println(thrust_M_design);
-            Serial.print("Uplimit: "); Serial.println(uplimit);
-            Serial.print("Error: "); Serial.println(Error);
-           }
-
-         // control value determination
-         if (abs(Error) >= uplimit)  
-            Control_value = sign(Error)*thrust_M_design;
-         else {
-            if (abs(Error) >= deadband) 
-               Control_value = Error;
-            else
-               Control_value = 0;
-           }
-
-         if (SerialDebug) {
-            Serial.print("Control value: "); Serial.println(Control_value);
-           }
-
-         // thruster status determination
-         if (time_last_on > time_last_off) { // thrusters are on.
-            if (abs(Control_value) >= Control_value_min)
-               duration_on = off_duration_min*abs(Control_value)/(thrust_M_design-abs(Control_value));
-            else
-               duration_on = on_duration_min;
-
-            currentTime = millis()/1000-ProgramBeginTime;
-            if (currentTime-time_last_on < duration_on)
-               thrust_switch = sign(Control_value);
-            else {
-               thrust_switch = 0;
-               time_last_off = currentTime;
-              }
-           }        
-         else { // thrusters are off.
-            duration_cycle = thrust_M_design*duration_on/abs(Control_value);
-            if (duration_cycle < duration_on+off_duration_min) // Minimum cycle due to thruster restrcition
-               duration_cycle = duration_on+off_duration_min;
-
-            currentTime = millis()/1000-ProgramBeginTime;
-            if (currentTime < duration_cycle-duration_on)
-               thrust_switch = 0;           
-            else {
-               thrust_switch = sign(Control_value);
-               time_last_on = currentTime;
-              }
-           }
-
-         activateThruster();
-     
-         if (SerialDebug) {
-            Serial.print("Yaw, Pitch, Roll: ");
-            Serial.print(yaw, 1);
-            Serial.print(", ");
-            Serial.print(pitch, 1);
-            Serial.print(", ");
-            Serial.println(roll, 1);
-    
-            Serial.print("rate = "); Serial.print((float)sumCount/sum, 2); Serial.println(" Hz");
-           }
-
-         if (LCD) {
-            display.clear();
-            display.print("Yaw  Pitch  Roll");
-            display.setCursor(0,1); display.print(yaw, 0);
-            display.setCursor(5,1); display.print(pitch, 0);
-            display.setCursor(12,1); display.print(roll, 0);
-           }
-
-         count = millis(); 
-         sumCount = 0;
-         sum = 0;  
-        }
-    }       
 }
-
-//===================================================================================================================
-//====== Set of useful function to access acceleration. gyroscope, magnetometer, and temperature data
-//===================================================================================================================
 
 void getMres() {
   switch (Mscale)
   {
- 	// Possible magnetometer scales (and their register bit settings) are:
-	// 14 bit resolution (0) and 16 bit resolution (1)
+   // Possible magnetometer scales (and their register bit settings) are:
+  // 14 bit resolution (0) and 16 bit resolution (1)
     case MFS_14BITS:
           mRes = 10.*4800./8190.; // Proper scale to return milliGauss //4912
           break;
@@ -591,8 +362,8 @@ void getMres() {
 void getGres() {
   switch (Gscale)
   {
- 	// Possible gyro scales (and their register bit settings) are:
-	// 250 DPS (00), 500 DPS (01), 1000 DPS (10), and 2000 DPS  (11). 
+  // Possible gyro scales (and their register bit settings) are:
+  // 250 DPS (00), 500 DPS (01), 1000 DPS (10), and 2000 DPS  (11). 
         // Here's a bit of an algorith to calculate DPS/(ADC tick) based on that 2-bit value:
     case GFS_250DPS:
           gRes = 250.0/32768.0;
@@ -612,8 +383,8 @@ void getGres() {
 void getAres() {
   switch (Ascale)
   {
- 	// Possible accelerometer scales (and their register bit settings) are:
-	// 2 Gs (00), 4 Gs (01), 8 Gs (10), and 16 Gs  (11). 
+  // Possible accelerometer scales (and their register bit settings) are:
+  // 2 Gs (00), 4 Gs (01), 8 Gs (10), and 16 Gs  (11). 
         // Here's a bit of an algorith to calculate DPS/(ADC tick) based on that 2-bit value:
     case AFS_2G:
           aRes = 2.0/32768.0;
@@ -694,7 +465,10 @@ void initAK8963(float * destination)
 
 
 void initMPU9250()
-{  
+{ 
+ float gyrosensitivity  = 131;   // = 131 LSB/degrees/sec
+ uint8_t data[6]; // data array to hold gyro x, y, z, data
+  
  // wake up device
   writeByte(MPU9250_ADDRESS, PWR_MGMT_1, 0x00); // Clear sleep mode bit (6), enable all sensors 
   delay(100); // Wait for all registers to reset 
@@ -743,9 +517,26 @@ void initMPU9250()
   // Set interrupt pin active high, push-pull, hold interrupt pin level HIGH until interrupt cleared,
   // clear on read of INT_STATUS, and enable I2C_BYPASS_EN so additional chips 
   // can join the I2C bus and all can be controlled by the Arduino as master
-   writeByte(MPU9250_ADDRESS, INT_PIN_CFG, 0x22);    
-   writeByte(MPU9250_ADDRESS, INT_ENABLE, 0x01);  // Enable data ready (bit 0) interrupt
-   delay(100);
+  writeByte(MPU9250_ADDRESS, INT_PIN_CFG, 0x22);    
+  writeByte(MPU9250_ADDRESS, INT_ENABLE, 0x01);  // Enable data ready (bit 0) interrupt
+  delay(100);
+
+  // Construct the gyro biases for push to the hardware gyro bias registers, which are reset to zero upon device startup
+  data[0] = ((int32_t)(-gyroBias[0]*gyrosensitivity/4)  >> 8) & 0xFF; // Divide by 4 to get 32.9 LSB per deg/s to conform to expected bias input format
+  data[1] = ((int32_t)(-gyroBias[0]*gyrosensitivity/4))       & 0xFF; // Biases are additive, so change sign on calculated average gyro biases
+  data[2] = ((int32_t)(-gyroBias[1]*gyrosensitivity/4)  >> 8) & 0xFF;
+  data[3] = ((int32_t)(-gyroBias[1]*gyrosensitivity/4))       & 0xFF;
+  data[4] = ((int32_t)(-gyroBias[2]*gyrosensitivity/4)  >> 8) & 0xFF;
+  data[5] = ((int32_t)(-gyroBias[2]*gyrosensitivity/4))       & 0xFF;
+  
+  // Push gyro biases to hardware registers
+  writeByte(MPU9250_ADDRESS, XG_OFFSET_H, data[0]);
+  writeByte(MPU9250_ADDRESS, XG_OFFSET_L, data[1]);
+  writeByte(MPU9250_ADDRESS, YG_OFFSET_H, data[2]);
+  writeByte(MPU9250_ADDRESS, YG_OFFSET_L, data[3]);
+  writeByte(MPU9250_ADDRESS, ZG_OFFSET_H, data[4]);
+  writeByte(MPU9250_ADDRESS, ZG_OFFSET_L, data[5]);
+  delay(100);
 }
 
 
@@ -813,38 +604,22 @@ void calibrateMPU9250(float * dest1, float * dest2)
     gyro_bias[1]  += (int32_t) gyro_temp[1];
     gyro_bias[2]  += (int32_t) gyro_temp[2];
             
-  }
-    accel_bias[0] /= (int32_t) packet_count; // Normalize sums to get average count biases
-    accel_bias[1] /= (int32_t) packet_count;
-    accel_bias[2] /= (int32_t) packet_count;
-    gyro_bias[0]  /= (int32_t) packet_count;
-    gyro_bias[1]  /= (int32_t) packet_count;
-    gyro_bias[2]  /= (int32_t) packet_count;
+   }
+  accel_bias[0] /= (int32_t) packet_count; // Normalize sums to get average count biases
+  accel_bias[1] /= (int32_t) packet_count;
+  accel_bias[2] /= (int32_t) packet_count;
+  gyro_bias[0]  /= (int32_t) packet_count;
+  gyro_bias[1]  /= (int32_t) packet_count;
+  gyro_bias[2]  /= (int32_t) packet_count;
 
-    accel_bias[2] -= (int32_t) accelsensitivity;
-   // if(accel_bias[2] > 0L) {accel_bias[2] -= (int32_t) accelsensitivity;}  // add gravity to the z-axis accelerometer bias calculation
-   // else {accel_bias[2] += (int32_t) accelsensitivity;}\
-   
-// Construct the gyro biases for push to the hardware gyro bias registers, which are reset to zero upon device startup
-  data[0] = (-gyro_bias[0]/4  >> 8) & 0xFF; // Divide by 4 to get 32.9 LSB per deg/s to conform to expected bias input format
-  data[1] = (-gyro_bias[0]/4)       & 0xFF; // Biases are additive, so change sign on calculated average gyro biases
-  data[2] = (-gyro_bias[1]/4  >> 8) & 0xFF;
-  data[3] = (-gyro_bias[1]/4)       & 0xFF;
-  data[4] = (-gyro_bias[2]/4  >> 8) & 0xFF;
-  data[5] = (-gyro_bias[2]/4)       & 0xFF;
-  
-  // Push gyro biases to hardware registers
-  writeByte(MPU9250_ADDRESS, XG_OFFSET_H, data[0]);
-  writeByte(MPU9250_ADDRESS, XG_OFFSET_L, data[1]);
-  writeByte(MPU9250_ADDRESS, YG_OFFSET_H, data[2]);
-  writeByte(MPU9250_ADDRESS, YG_OFFSET_L, data[3]);
-  writeByte(MPU9250_ADDRESS, ZG_OFFSET_H, data[4]);
-  writeByte(MPU9250_ADDRESS, ZG_OFFSET_L, data[5]);
+  accel_bias[2] -= (int32_t) accelsensitivity; // remove gravity from the z-axis accelerometer for bias calculation
+  // if(accel_bias[2] > 0L) {accel_bias[2] -= (int32_t) accelsensitivity;}  
+  // else {accel_bias[2] += (int32_t) accelsensitivity;}
   
   // Output scaled gyro biases for display in the main program
-  dest1[0] = (float) gyro_bias[0]/(float) gyrosensitivity;  
-  dest1[1] = (float) gyro_bias[1]/(float) gyrosensitivity;
-  dest1[2] = (float) gyro_bias[2]/(float) gyrosensitivity;
+  dest1[0] = (float)gyro_bias[0]/(float)gyrosensitivity;  
+  dest1[1] = (float)gyro_bias[1]/(float)gyrosensitivity;
+  dest1[2] = (float)gyro_bias[2]/(float)gyrosensitivity;
 
   // Output scaled accelerometer biases for display in the main program
   dest2[0] = (float)accel_bias[0]/(float)accelsensitivity; 
@@ -942,31 +717,31 @@ void MPU9250SelfTest(float * destination) // Should return percent deviation fro
 // Wire.h read and write protocols
 void writeByte(uint8_t address, uint8_t subAddress, uint8_t data)
 {
-	Wire.beginTransmission(address);  // Initialize the Tx buffer
-	Wire.write(subAddress);           // Put slave register address in Tx buffer
-	Wire.write(data);                 // Put data in Tx buffer
-	Wire.endTransmission();           // Send the Tx buffer
+  Wire.beginTransmission(address);  // Initialize the Tx buffer
+  Wire.write(subAddress);           // Put slave register address in Tx buffer
+  Wire.write(data);                 // Put data in Tx buffer
+  Wire.endTransmission();           // Send the Tx buffer
 }
 
 uint8_t readByte(uint8_t address, uint8_t subAddress)
 {
-	uint8_t data; // `data` will store the register data	 
-	Wire.beginTransmission(address);         // Initialize the Tx buffer
-	Wire.write(subAddress);	                 // Put slave register address in Tx buffer
-	Wire.endTransmission(false);             // Send the Tx buffer, but send a restart to keep connection alive
-	Wire.requestFrom(address, (uint8_t) 1);  // Read one byte from slave register address 
-	data = Wire.read();                      // Fill Rx buffer with result
-	return data;                             // Return data read from slave register
+  uint8_t data; // `data` will store the register data   
+  Wire.beginTransmission(address);         // Initialize the Tx buffer
+  Wire.write(subAddress);                  // Put slave register address in Tx buffer
+  Wire.endTransmission(false);             // Send the Tx buffer, but send a restart to keep connection alive
+  Wire.requestFrom(address, (uint8_t) 1);  // Read one byte from slave register address 
+  data = Wire.read();                      // Fill Rx buffer with result
+  return data;                             // Return data read from slave register
 }
 
 void readBytes(uint8_t address, uint8_t subAddress, uint8_t count, uint8_t * dest)
 {  
-	Wire.beginTransmission(address);   // Initialize the Tx buffer
-	Wire.write(subAddress);            // Put slave register address in Tx buffer
-	Wire.endTransmission(false);       // Send the Tx buffer, but send a restart to keep connection alive
-	uint8_t i = 0;
+  Wire.beginTransmission(address);   // Initialize the Tx buffer
+  Wire.write(subAddress);            // Put slave register address in Tx buffer
+  Wire.endTransmission(false);       // Send the Tx buffer, but send a restart to keep connection alive
+  uint8_t i = 0;
         Wire.requestFrom(address, count);  // Read bytes from slave register address 
-	while (Wire.available()) {
+  while (Wire.available()) {
         dest[i++] = Wire.read(); }         // Put read results in the Rx buffer
 }
 
@@ -975,8 +750,6 @@ void magcalMPU9250(float * dest1, float * dest2)
  uint16_t ii = 0, sample_count = 0;
  int32_t mag_bias[3] = {0, 0, 0}, mag_scale[3] = {0, 0, 0};
  int16_t mag_max[3] = {-32767, -32767, -32767}, mag_min[3] = {32767, 32767, 32767}, mag_temp[3] = {0, 0, 0};
-
- // Serial.println("Mag Calibration: Wave device in a figure eight until done!");
 
  // shoot for ~fifteen seconds of mag data
  if(Mmode == 0x02) sample_count = 500;  // at 8 Hz ODR, new mag data is available every 125 ms
@@ -1011,54 +784,5 @@ void magcalMPU9250(float * dest1, float * dest2)
  dest2[0] = avg_rad/((float)mag_scale[0]);
  dest2[1] = avg_rad/((float)mag_scale[1]);
  dest2[2] = avg_rad/((float)mag_scale[2]);
-
- // Serial.println("Mag Calibration done!");
 }
-
-float getAngle()
-{
-  return yaw/180*PI;
-}
-
-float getAnguV()
-{
-  return gz/180*PI;
-}
-
-void initModulator()
-{
-  Expectation = 0; // the angle we want to track. Expectation = 0 represents pointing toward North.
-
-  angle_sensor = getAngle();
-  angu_v_sensor = getAnguV();
-  Error = Expectation - angle_sensor*K_angle - angu_v_sensor*K_angu_v;
-
-  // control value determination
-  if (abs(Error) >= uplimit)  
-        Control_value = sign(Error)*thrust_M_design;
-  else
-     {
-      if (abs(Error) >= deadband) 
-          Control_value = Error;
-      else
-          Control_value = 0;
-     }
-
-  duration_on = on_duration_min;
-  duration_cycle = thrust_M_design*duration_on/abs(Control_value);
-  if (duration_cycle < duration_on+off_duration_min)
-     duration_cycle = duration_on+off_duration_min;
-  time_last_on = -duration_cycle;
-  time_last_off = -duration_cycle+duration_on;
-}
-
-void activateThruster()
-{
- /* Serial.println(thrust_switch);
-  Serial.println("Thrust!"); */
-
-  return;
-}
-
-
 
