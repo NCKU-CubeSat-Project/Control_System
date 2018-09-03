@@ -59,3 +59,9 @@ This node is used to set whether to power on the thrusters. After the command, t
 
 > #### [NOTE:]
 > For every service nodes, it is normal to get error message of not getting feedback from arduino because the implements of rosserial_arduino still have not had the ability to feedback information from callback functions in arduino. You will see a yellow message telling you to ignore the error.
+
+### test_thruster (client)
+command
+```
+rosrun serial_communication test_thruster
+```
