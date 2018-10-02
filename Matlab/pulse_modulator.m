@@ -1,6 +1,6 @@
 %% Plot results by huge loop 
-K_angle=0.5; %feedback gain for angle position   
-K_angu_v=0.2; %feedback gain for angular velocity
+K_angle=0.2; %feedback gain for angle position   
+K_angu_v=0.1; %feedback gain for angular velocity
 while (K_angu_v <= 1.0)
     
 %%%%%% problems waiting for solutions (incomplete code) %%%%%%%
@@ -23,7 +23,7 @@ scale_sensor2data=sensor_period/drawing_period;
 
 %%%%%%%%%%%%%%% plant %%%%%%%%%%%%%%%
 % assuming that center of mass is at geometric center 
-m=16; %mass kg
+m=4.54; %mass kg (actual system mass = 4.54 kg; design system mass = 16 kg)
 w=0.239; %width meter
 l=0.464; %length meter
 I=1/12*m*(w^2+l^2); %moment of inertia (kg*meter^2)
@@ -40,8 +40,8 @@ off_duration_min=0.2; %0.03;
 Control_value_min=thrust_M_design*on_duration_min/(on_duration_min+off_duration_min);
 
 %%%%%%%%%%%%%%% sensor %%%%%%%%%%%%%%
-%K_angle=0.3; %feedback gain for angle position   
-%K_angu_v=0.6; %feedback gain for angular velocity
+K_angle=0.15; %feedback gain for angle position   
+K_angu_v=0.2; %feedback gain for angular velocity
 
 %%%%%%%% controller %%%%%%%%
 uplimit=thrust_M_design;
@@ -247,5 +247,5 @@ saveas(1,filename);
 %%
 clf
 
-K_angu_v = K_angu_v + 0.2;
+K_angu_v = K_angu_v + 0.1;
 end
