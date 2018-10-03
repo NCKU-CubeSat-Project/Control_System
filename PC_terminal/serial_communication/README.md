@@ -57,5 +57,29 @@ rosrun serial_communication power_thruster
 
 This node is used to set whether to power on the thrusters. After the command, the terminal will ask you to enter `Y` or `N` to determine the power status. The default is OFF.
 
+### test_thruster (client)
+command:
+```
+rosrun serial_communication test_thruster
+```
+
+This node is used to test the thrusters before the experiment. After the command, the terminal will ask you to enter `Y` or `N` to operate the test procedure. The default is OFF. 
+
+The test procedure is  
+1. Open the power supply
+2. Open the right thruster
+3. Close the right thruster
+4. Open the left thruster
+5. Close the left thruster
+6. Close the power supply
+
+### alert (client)
+command:
+```
+rosrun serial_communication alert
+```
+
+This node is used to start the alerting just before the experiment. After the command, the terminal will ask you to enter `Y` or `N` to operate the alert procedure(about 2 sec). The default is OFF.
+
 > #### [NOTE:]
 > For every service nodes, it is normal to get error message of not getting feedback from arduino because the implements of rosserial_arduino still have not had the ability to feedback information from callback functions in arduino. You will see a yellow message telling you to ignore the error.

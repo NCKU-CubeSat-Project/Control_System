@@ -1,3 +1,8 @@
+%% Plot results by huge loop 
+K_angle=0.2; %feedback gain for angle position   
+K_angu_v=0.1; %feedback gain for angular velocity
+while (K_angu_v <= 1.0)
+    
 %%%%%% problems waiting for solutions (incomplete code) %%%%%%%
 % - check availability of thrusters
 %% symbol 
@@ -18,7 +23,7 @@ scale_sensor2data=sensor_period/drawing_period;
 
 %%%%%%%%%%%%%%% plant %%%%%%%%%%%%%%%
 % assuming that center of mass is at geometric center 
-m=16; %mass kg
+m=4.54; %mass kg (actual system mass = 4.54 kg; design system mass = 16 kg)
 w=0.239; %width meter
 l=0.464; %length meter
 I=1/12*m*(w^2+l^2); %moment of inertia (kg*meter^2)
@@ -28,15 +33,15 @@ angle_initial=30/180*pi; %rad. Must between -180~180
 
 %%%%%%%%%%%%% thruster %%%%%%%%%%%%%%
 Sys_thrust=tf(1,1); %tf(4800,[1 140 4800]); %thruster perturbation
-thrust_M_design=0.4*(l/2)*(3/4); % desirable moment produced by thruster
-thrust_M=0.5*(l/2)*(3/4); % actual moment produced by thruster
-on_duration_min=0.03; %0.03;
-off_duration_min=0.03; %0.03;
+thrust_M_design=0.6*(l/2)*(3/4)*l; % desirable moment produced by thruster
+thrust_M=0.6*(l/2)*(3/4)*l; % actual moment produced by thruster
+on_duration_min=0.2; %0.03;
+off_duration_min=0.2; %0.03;
 Control_value_min=thrust_M_design*on_duration_min/(on_duration_min+off_duration_min);
 
 %%%%%%%%%%%%%%% sensor %%%%%%%%%%%%%%
-K_angle=0.3; %feedback gain for angle position   
-K_angu_v=0.6; %feedback gain for angular velocity
+K_angle=0.15; %feedback gain for angle position   
+K_angu_v=0.2; %feedback gain for angular velocity
 
 %%%%%%%% controller %%%%%%%%
 uplimit=thrust_M_design;
@@ -194,8 +199,15 @@ for sensor_point=1:sensor_samplingNumber
     Actuator_record=Actuator_record+Actuator;
 end
 
-figure,
+figure(1),
 subplot(3,1,1)
+dim = [.15 .67 .3 .3];
+str = strcat('System = ',num2str(m),'kg');
+annotation('textbox',dim,'String',str,'FitBoxToText','on');
+dim = [.7 .67 .3 .3];
+str = strcat('K1 = ',num2str(K_angle),' K2 = ',num2str(K_angu_v));
+annotation('textbox',dim,'String',str,'FitBoxToText','on');
+
 if Desired_angle_input < -Range_adj || Desired_angle_input > Range_adj % -180 is shifted to 180
     plot(testing_period,angle_response_thrust/pi*180,'b',testing_period,angle_response_thrust_adj/pi*180,'m',testing_period,disturbance_impulse,'g',testing_period,angle_response/pi*180,'r'), grid on, title('angle (degree)'), %,testing_period,disturbance_impulse,'g',testing_period,angle_response/pi*180,'r'
 else
@@ -226,3 +238,14 @@ subplot(3,1,2)
 plot(testing_period,angu_v_response_thrust/pi*180,'b',testing_period,angu_v_response/pi*180,'r'), grid on, title('avgular velocity (degree/s)'); %testing_period,angu_v_response/pi*180,'r',
 subplot(3,1,3)
 plot(testing_period,Actuator_record,'b'), grid on, title('control value (torque, N-m)'); %testing_period,Control_value_thrust_record,'m',testing_period,Control_value_record,'r',
+%%
+filename = strcat('simulation results/',num2str(m),'kg K1=',num2str(K_angle),' K2=',num2str(K_angu_v),'.fig');
+saveas(1,filename);
+filename = strcat('simulation results/',num2str(m),'kg K1=',num2str(K_angle),' K2=',num2str(K_angu_v),'.png');
+saveas(1,filename);
+
+%%
+clf
+
+K_angu_v = K_angu_v + 0.1;
+end
