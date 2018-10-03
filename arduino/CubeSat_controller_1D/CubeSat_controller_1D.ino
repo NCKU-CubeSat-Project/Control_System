@@ -4,7 +4,7 @@
 #include <Utility.h>
 
 // Using I2C LCD monochrome 84 x 48 pixel display
-LiquidCrystal_I2C display(0x27,16,2);  // set the LCD address to 0x27 for a 16 chars and 2 line display
+LiquidCrystal_I2C display(0x3F,16,2);  // set the LCD address to 0x27 for a 16 chars and 2 line display
 
 // See also MPU-9250 Register Map and Descriptions, Revision 4.0, RM-MPU-9250A-00, Rev. 1.4, 9/9/2013 for registers not listed in 
 // above document; the MPU9250 and MPU9150 are virtually identical but the latter has a different register map
@@ -167,7 +167,7 @@ LiquidCrystal_I2C display(0x27,16,2);  // set the LCD address to 0x27 for a 16 c
 #define AHRS true         // set to false for basic data read
 #define SerialDebug false   // set to true to get Serial output for debugging
 #define MAG_CALIBRATION false // set true to do magnetic calibration
-#define LCD false // set true to print on LCD
+#define LCD true // set true to print on LCD
 
 // Set initial input parameters
 enum Ascale {
