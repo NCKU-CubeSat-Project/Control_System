@@ -167,7 +167,7 @@ LiquidCrystal_I2C display(0x3F,16,2);  // set the LCD address to 0x27 for a 16 c
 #define AHRS true         // set to false for basic data read
 #define SerialDebug false   // set to true to get Serial output for debugging
 #define MAG_CALIBRATION false // set true to do magnetic calibration
-#define LCD false // set true to print on LCD
+#define LCD true // set true to print on LCD
 
 // Set initial input parameters
 enum Ascale {

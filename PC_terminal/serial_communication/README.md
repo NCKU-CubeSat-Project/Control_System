@@ -83,3 +83,6 @@ This node is used to start the alerting just before the experiment. After the co
 
 > #### [NOTE:]
 > For every service nodes, it is normal to get error message of not getting feedback from arduino because the implements of rosserial_arduino still have not had the ability to feedback information from callback functions in arduino. You will see a yellow message telling you to ignore the error.
+
+## Updates
+2018/10 - Add data record functions.
