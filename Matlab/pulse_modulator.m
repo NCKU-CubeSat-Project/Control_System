@@ -1,10 +1,10 @@
 %% Plot results by huge loop 
-K_angle=0.2; %feedback gain for angle position   
-K_angu_v=0.1; %feedback gain for angular velocity
-while (K_angu_v <= 1.0)
+% K_angle=0.5; %feedback gain for angle position   
+% K_angu_v=0.1; %feedback gain for angular velocity
+% while (K_angu_v <= 1.0)
     
-%%%%%% problems waiting for solutions (incomplete code) %%%%%%%
-% - check availability of thrusters
+%%%%% problems waiting for solutions (incomplete code) %%%%%%%
+%- check availability of thrusters
 %% symbol 
 s=tf('s');
 Var=[1.632119 0.002449]; % variance of noise for yaw and gz
@@ -29,19 +29,20 @@ l=0.464; %length meter
 I=1/12*m*(w^2+l^2); %moment of inertia (kg*meter^2)
 Sys=tf(1,[I 0]); %system transfer function
 angu_v_initial=0/180*pi; %rad/sec
-angle_initial=30/180*pi; %rad. Must between -180~180
+angle_ini = 30;
+angle_initial=angle_ini/180*pi; %rad. Must between -180~180
 
 %%%%%%%%%%%%% thruster %%%%%%%%%%%%%%
 Sys_thrust=tf(1,1); %tf(4800,[1 140 4800]); %thruster perturbation
-thrust_M_design=0.6*(l/2)*(3/4)*l; % desirable moment produced by thruster
-thrust_M=0.6*(l/2)*(3/4)*l; % actual moment produced by thruster
+thrust_M_design=0.6*(l/2)*(3/4); % desirable moment produced by thruster
+thrust_M=0.6*(l/2)*(3/4); % actual moment produced by thruster
 on_duration_min=0.2; %0.03;
 off_duration_min=0.2; %0.03;
 Control_value_min=thrust_M_design*on_duration_min/(on_duration_min+off_duration_min);
 
 %%%%%%%%%%%%%%% sensor %%%%%%%%%%%%%%
-K_angle=0.15; %feedback gain for angle position   
-K_angu_v=0.2; %feedback gain for angular velocity
+K_angle=0.2; %feedback gain for angle position   
+K_angu_v=0.3; %feedback gain for angular velocity
 
 %%%%%%%% controller %%%%%%%%
 uplimit=thrust_M_design;
@@ -239,13 +240,16 @@ plot(testing_period,angu_v_response_thrust/pi*180,'b',testing_period,angu_v_resp
 subplot(3,1,3)
 plot(testing_period,Actuator_record,'b'), grid on, title('control value (torque, N-m)'); %testing_period,Control_value_thrust_record,'m',testing_period,Control_value_record,'r',
 %%
-filename = strcat('simulation results/',num2str(m),'kg K1=',num2str(K_angle),' K2=',num2str(K_angu_v),'.fig');
+filename = strcat('simulation results/',num2str(m),'kg angle=',num2str(angle_ini),' K1=',num2str(K_angle),' K2=',num2str(K_angu_v),'.fig');
 saveas(1,filename);
-filename = strcat('simulation results/',num2str(m),'kg K1=',num2str(K_angle),' K2=',num2str(K_angu_v),'.png');
+filename = strcat('simulation results/',num2str(m),'kg angle=',num2str(angle_ini),' K1=',num2str(K_angle),' K2=',num2str(K_angu_v),'.png');
 saveas(1,filename);
-
-%%
-clf
-
-K_angu_v = K_angu_v + 0.1;
-end
+% filename = strcat('simulation results/',num2str(m),'kg K1=',num2str(K_angle),' K2=',num2str(K_angu_v),'.fig');
+% saveas(1,filename);
+% filename = strcat('simulation results/',num2str(m),'kg K1=',num2str(K_angle),' K2=',num2str(K_angu_v),'.png');
+% saveas(1,filename);
+% %%
+% clf
+% 
+% K_angu_v = K_angu_v + 0.1;
+% end
