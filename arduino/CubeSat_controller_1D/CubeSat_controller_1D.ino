@@ -165,7 +165,7 @@ LiquidCrystal_I2C display(0x3F,16,2);  // set the LCD address to 0x27 for a 16 c
 #endif  
 
 #define AHRS true         // set to false for basic data read
-#define SerialDebug false   // set to true to get Serial output for debugging
+#define SerialDebug true   // set to true to get Serial output for debugging
 #define MAG_CALIBRATION false // set true to do magnetic calibration
 #define LCD true // set true to print on LCD
 
@@ -265,7 +265,7 @@ void setup()
 {
   Wire.begin();
 //  TWBR = 12;  // 400 kbit/sec I2C speed
-  Serial.begin(9600);
+  Serial.begin(38400);
   
   // Set up the interrupt pin, it's set as active high, push-pull
   pinMode(intPin, INPUT);
@@ -493,10 +493,10 @@ void loop()
          angu_v_sensor = getAnguV();
          Error = Expectation - angle_sensor*K_angle - angu_v_sensor*K_angu_v;
          if (SerialDebug) {
-            Serial.print("deadband: "); Serial.println(deadband);
-            Serial.print("thrust_M_design: "); Serial.println(thrust_M_design);
-            Serial.print("Uplimit: "); Serial.println(uplimit);
-            Serial.print("Error: "); Serial.println(Error);
+             Serial.print("deadband: "); Serial.println(deadband);
+             Serial.print("thrust_M_design: "); Serial.println(thrust_M_design);
+             Serial.print("Uplimit: "); Serial.println(uplimit);
+             Serial.print("Error: "); Serial.println(Error);
            }
 
          // control value determination
@@ -510,7 +510,7 @@ void loop()
            }
 
          if (SerialDebug) {
-            Serial.print("Control value: "); Serial.println(Control_value);
+            // Serial.print("Control value: "); Serial.println(Control_value);
            }
 
          // thruster status determination
@@ -1059,6 +1059,3 @@ void activateThruster()
 
   return;
 }
-
-
-
